@@ -1,0 +1,233 @@
+diff --git i/CMakeLists.txt w/CMakeLists.txt
+index 08d7c54..90f03a9 100644
+--- i/CMakeLists.txt
++++ w/CMakeLists.txt
+@@ -119,7 +119,7 @@ set(FISH_SRCS
+     src/proc.cpp src/re.cpp src/reader.cpp src/redirection.cpp src/screen.cpp
+     src/signal.cpp src/termsize.cpp src/timer.cpp src/tinyexpr.cpp
+     src/tokenizer.cpp src/topic_monitor.cpp src/trace.cpp src/utf8.cpp src/util.cpp
+-    src/wait_handle.cpp src/wcstringutil.cpp src/wgetopt.cpp src/wildcard.cpp 
++    src/wait_handle.cpp src/wcstringutil.cpp src/wgetopt.cpp src/wildcard.cpp
+     src/wutil.cpp src/fds.cpp
+ )
+ 
+@@ -175,8 +175,8 @@ endfunction(FISH_LINK_DEPS_AND_SIGN)
+ add_library(fishlib STATIC ${FISH_SRCS} ${FISH_BUILTIN_SRCS})
+ target_sources(fishlib PRIVATE ${FISH_HEADERS})
+ target_link_libraries(fishlib
+-  ${CURSES_LIBRARY} ${CURSES_EXTRA_LIBRARY} Threads::Threads ${CMAKE_DL_LIBS}
+-  ${PCRE2_LIB} ${Intl_LIBRARIES} ${ATOMIC_LIBRARY})
++  ${PCRE2_LIB} Threads::Threads ${CMAKE_DL_LIBS}
++  ${Intl_LIBRARIES} ${ATOMIC_LIBRARY})
+ target_include_directories(fishlib PRIVATE
+   ${CURSES_INCLUDE_DIRS})
+ 
+diff --git i/cmake/ConfigureChecks.cmake w/cmake/ConfigureChecks.cmake
+index 59f9b5a..877f4c5 100644
+--- i/cmake/ConfigureChecks.cmake
++++ w/cmake/ConfigureChecks.cmake
+@@ -127,9 +127,9 @@ check_cxx_symbol_exists(gettext libintl.h HAVE_GETTEXT)
+ check_cxx_symbol_exists(killpg "sys/types.h;signal.h" HAVE_KILLPG)
+ # mkostemp is in stdlib in glibc and FreeBSD, but unistd on macOS
+ check_cxx_symbol_exists(mkostemp "stdlib.h;unistd.h" HAVE_MKOSTEMP)
+-set(HAVE_CURSES_H ${CURSES_HAVE_CURSES_H})
+-set(HAVE_NCURSES_CURSES_H ${CURSES_HAVE_NCURSES_CURSES_H})
+-set(HAVE_NCURSES_H ${CURSES_HAVE_NCURSES_H})
++set(HAVE_CURSES_H 0)
++set(HAVE_NCURSES_CURSES_H 0)
++set(HAVE_NCURSES_H 1)
+ if(HAVE_CURSES_H)
+     check_include_files("curses.h;term.h" HAVE_TERM_H)
+ endif()
+@@ -204,7 +204,7 @@ elseif(HAVE_NCURSES_TERM_H)
+ endif()
+ 
+ cmake_push_check_state()
+-list(APPEND CMAKE_REQUIRED_LIBRARIES ${CURSES_LIBRARY})
++#list(APPEND CMAKE_REQUIRED_LIBRARIES ${CURSES_LIBRARY})
+ # Solaris and X/Open-conforming systems have a fixed-args tparm
+ check_cxx_source_compiles("
+ #define TPARM_VARARGS
+diff --git i/src/fallback.h w/src/fallback.h
+index 79ed828..2051e71 100644
+--- i/src/fallback.h
++++ w/src/fallback.h
+@@ -31,6 +31,8 @@ int fish_mkstemp_cloexec(char *);
+ /// thread_local support.
+ #if HAVE_CX11_THREAD_LOCAL
+ #define FISH_THREAD_LOCAL thread_local
++#elif defined(__MVS__)
++#define FISH_THREAD_LOCAL
+ #elif defined(__GNUC__)
+ #define FISH_THREAD_LOCAL __thread
+ #elif defined(_MSC_VER)
+diff --git i/src/fish.cpp w/src/fish.cpp
+index 1e2aa7d..dbc12a2 100644
+--- i/src/fish.cpp
++++ w/src/fish.cpp
+@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+ */
++#include <getopt.h>
+ #include "config.h"
+ 
+ #include <fcntl.h>
+@@ -113,14 +114,14 @@ static void print_rusage_self(FILE *fp) {
+     long rss_kb = rs.ru_maxrss / 1024;
+ #else
+     // Everyone else uses KB.
+-    long rss_kb = rs.ru_maxrss;
++    long rss_kb = 1024*1024; //rs.ru_maxrss;
+ #endif
+     fprintf(fp, "  rusage self:\n");
+     fprintf(fp, "      user time: %lld ms\n", tv_to_msec(rs.ru_utime));
+     fprintf(fp, "       sys time: %lld ms\n", tv_to_msec(rs.ru_stime));
+     fprintf(fp, "     total time: %lld ms\n", tv_to_msec(rs.ru_utime) + tv_to_msec(rs.ru_stime));
+     fprintf(fp, "        max rss: %ld kb\n", rss_kb);
+-    fprintf(fp, "        signals: %ld\n", rs.ru_nsignals);
++    fprintf(fp, "        signals: %ld\n", 42);
+ #endif
+ }
+ 
+@@ -466,7 +467,7 @@ int main(int argc, char **argv) {
+             exit(-1);
+         }
+         set_cloexec(fileno(debug_output));
+-        setlinebuf(debug_output);
++        //setlinebuf(debug_output);
+         set_flog_output_file(debug_output);
+     }
+ 
+diff --git i/src/fish_indent.cpp w/src/fish_indent.cpp
+index 1427866..a50341e 100644
+--- i/src/fish_indent.cpp
++++ w/src/fish_indent.cpp
+@@ -994,7 +994,7 @@ int main(int argc, char *argv[]) {
+             exit(-1);
+         }
+         set_cloexec(fileno(debug_output_file));
+-        setlinebuf(debug_output_file);
++//        setlinebuf(debug_output_file);
+         set_flog_output_file(debug_output_file);
+     }
+ 
+diff --git i/src/iothread.cpp w/src/iothread.cpp
+index c9bbe20..69c9f21 100644
+--- i/src/iothread.cpp
++++ w/src/iothread.cpp
+@@ -5,6 +5,7 @@
+ #include <pthread.h>
+ #include <signal.h>
+ #include <stdio.h>
++#include <zos-tls.h>
+ 
+ #include <atomic>
+ #include <chrono>
+@@ -139,7 +140,7 @@ maybe_t<work_request_t> thread_pool_t::dequeue_work_or_commit_to_exit() {
+     return result;
+ }
+ 
+-static intptr_t this_thread() { return (intptr_t)pthread_self(); }
++static intptr_t this_thread() { return (intptr_t)pthread_self().__; }
+ 
+ void *thread_pool_t::run() {
+     while (auto req = dequeue_work_or_commit_to_exit()) {
+@@ -317,10 +318,17 @@ static uint64_t next_thread_id() {
+     uint64_t res = 1 + s_last_thread_id.fetch_add(1, std::memory_order_relaxed);
+     return res;
+ }
++extern "C" int gettid() { return (int)(pthread_self().__ & 0x7fffffff); }
++
+ 
+ uint64_t thread_id() {
++#ifdef __MVS__
++  static __tlssim<uint64_t> __tl_tid{next_thread_id()};
++  #define tl_tid (*__tl_tid.access())
++#else
+     static FISH_THREAD_LOCAL uint64_t tl_tid = next_thread_id();
+-    return tl_tid;
++#endif
++    return gettid();
+ }
+ 
+ // Debounce implementation note: we would like to enqueue at most one request, except if a thread
+diff --git i/src/output.cpp w/src/output.cpp
+index 10aab08..1f3289a 100644
+--- i/src/output.cpp
++++ w/src/output.cpp
+@@ -288,7 +288,7 @@ void outputter_t::set_color(rgb_color_t fg, rgb_color_t bg) {
+ static std::mutex s_tputs_receiver_lock;
+ static outputter_t *s_tputs_receiver{nullptr};
+ 
+-static int tputs_writer(tputs_arg_t b) {
++static int tputs_writer(int b) {
+     ASSERT_IS_LOCKED(s_tputs_receiver_lock);
+     assert(s_tputs_receiver && "null s_tputs_receiver");
+     char c = static_cast<char>(b);
+diff --git i/src/postfork.cpp w/src/postfork.cpp
+index c56b9e6..6c44621 100644
+--- i/src/postfork.cpp
++++ w/src/postfork.cpp
+@@ -305,14 +305,14 @@ posix_spawner_t::posix_spawner_t(const job_t *j, const dup2_list_t &dup2s) {
+     if (check_fail(posix_spawnattr_setflags(attr(), flags))) return;
+ 
+     if (desired_pgid.has_value()) {
+-        if (check_fail(posix_spawnattr_setpgroup(attr(), *desired_pgid))) return;
++ //       if (check_fail(posix_spawnattr_setpgroup(attr(), *desired_pgid))) return;
+     }
+ 
+     // Everybody gets default handlers.
+     if (reset_signal_handlers) {
+         sigset_t sigdefault;
+         get_signals_with_handlers(&sigdefault);
+-        if (check_fail(posix_spawnattr_setsigdefault(attr(), &sigdefault))) return;
++//        if (check_fail(posix_spawnattr_setsigdefault(attr(), &sigdefault))) return;
+     }
+ 
+     // No signals blocked.
+diff --git i/src/reader.cpp w/src/reader.cpp
+index 3880b69..9812ac0 100644
+--- i/src/reader.cpp
++++ w/src/reader.cpp
+@@ -4758,11 +4758,12 @@ static int read_ni(parser_t &parser, int fd, const io_chain_t &io) {
+         return 1;
+     }
+ 
++
+     /* FreeBSD allows read() on directories. Error explicitly in that case. */
+-    if (buf.st_mode & S_IFDIR) {
+-        FLOGF(error, _(L"Unable to read input file: %s"), strerror(EISDIR));
+-        return 1;
+-    }
++//    if (buf.st_mode & S_IFDIR) {
++ //       FLOGF(error, _(L"Unable to read input file: %s"), strerror(EISDIR));
++  //      return 1;
++   // }
+ 
+     // Read all data into a std::string.
+     std::string fd_contents;
+diff --git i/src/wutil.cpp w/src/wutil.cpp
+index d1262a9..1c1a8b8 100644
+--- i/src/wutil.cpp
++++ w/src/wutil.cpp
+@@ -646,8 +646,8 @@ locale_t fish_numeric_locale() {
+     static locale_t loc = nullptr;
+     if (!fish_numeric_locale_is_valid) {
+         if (loc != nullptr) freelocale(loc);
+-        auto cur = duplocale(LC_GLOBAL_LOCALE);
+-        loc = newlocale(LC_NUMERIC_MASK, "", cur);
++        //auto cur = duplocale(LC_GLOBAL_LOCALE);
++        loc = newlocale(LC_NUMERIC_MASK, "", NULL);
+         fish_numeric_locale_is_valid = true;
+     }
+     return loc;
+@@ -891,7 +891,7 @@ file_id_t file_id_t::from_stat(const struct stat &buf) {
+ #elif defined(__APPLE__)
+     result.change_nanoseconds = buf.st_ctimespec.tv_nsec;
+     result.mod_nanoseconds = buf.st_mtimespec.tv_nsec;
+-#elif defined(_BSD_SOURCE) || defined(_SVID_SOURCE) || defined(_XOPEN_SOURCE)
++#elif defined(_BSD_SOURCE) || defined(_SVID_SOURCE) || defined(_XOPEN_SOURCE) && !defined(__MVS__)
+     result.change_nanoseconds = buf.st_ctim.tv_nsec;
+     result.mod_nanoseconds = buf.st_mtim.tv_nsec;
+ #else
