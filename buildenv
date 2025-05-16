@@ -25,7 +25,7 @@ zopen_pre_patch()
 {
 export CFLAGS="$CFLAGS -mzos-target=zosv2r5 -march=z13"
 export CXXFLAGS="$CXXFLAGS -mzos-target=zosv2r5 -march=z13"
-export CPPFLAGS="$CPPFLAGS -D_XPLATFORM_SOURCE=1 -D_POSIX_C_SOURCE=200809L -DMAP_ANONYMOUS=0 -D__GNU_LIBRARY__=1"
+export CPPFLAGS="$CPPFLAGS -D_XPLATFORM_SOURCE=1 -D_POSIX_C_SOURCE=200809L -DMAP_ANONYMOUS=0 -D__GNU_LIBRARY__=1 -UZOSLIB_USE_CLIB_LOCALE"
 }
 
 zopen_check_results()
