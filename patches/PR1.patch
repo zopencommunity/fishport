@@ -113,7 +113,7 @@ index 1427866..a50341e 100644
      }
  
 diff --git i/src/iothread.cpp w/src/iothread.cpp
-index c9bbe20..69c9f21 100644
+index c9bbe20..fc99ed4 100644
 --- i/src/iothread.cpp
 +++ w/src/iothread.cpp
 @@ -5,6 +5,7 @@
@@ -124,7 +124,26 @@ index c9bbe20..69c9f21 100644
  
  #include <atomic>
  #include <chrono>
-@@ -139,7 +140,7 @@ maybe_t<work_request_t> thread_pool_t::dequeue_work_or_commit_to_exit() {
+@@ -20,6 +21,18 @@
+ #include "flog.h"
+ #include "maybe.h"
+ 
++#ifdef __MVS__
++#include <pthread.h>
++#include <stdint.h>
++
++static pthread_key_t thread_id_key;
++static pthread_once_t key_once = PTHREAD_ONCE_INIT;
++
++static void make_key() {
++    pthread_key_create(&thread_id_key, /* destructor */ nullptr);
++}
++#endif
++
+ /// We just define a thread limit of 1024.
+ #define IO_MAX_THREADS 1024
+ 
+@@ -139,7 +152,7 @@ maybe_t<work_request_t> thread_pool_t::dequeue_work_or_commit_to_exit() {
      return result;
  }
  
@@ -133,25 +152,31 @@ index c9bbe20..69c9f21 100644
  
  void *thread_pool_t::run() {
      while (auto req = dequeue_work_or_commit_to_exit()) {
-@@ -317,10 +318,17 @@ static uint64_t next_thread_id() {
-     uint64_t res = 1 + s_last_thread_id.fetch_add(1, std::memory_order_relaxed);
+@@ -318,10 +331,23 @@ static uint64_t next_thread_id() {
      return res;
  }
-+extern "C" int gettid() { return (int)(pthread_self().__ & 0x7fffffff); }
-+
  
- uint64_t thread_id() {
 +#ifdef __MVS__
-+  static __tlssim<uint64_t> __tl_tid{next_thread_id()};
-+  #define tl_tid (*__tl_tid.access())
++uint64_t thread_id() {
++    pthread_once(&key_once, make_key);
++    void* val = pthread_getspecific(thread_id_key);
++    if (!val) {
++        uint64_t* new_id = new uint64_t(next_thread_id());
++        pthread_setspecific(thread_id_key, new_id);
++        return *new_id;
++    }
++    return *(uint64_t*)val;
++}
 +#else
-     static FISH_THREAD_LOCAL uint64_t tl_tid = next_thread_id();
--    return tl_tid;
-+#endif
-+    return gettid();
++FISH_THREAD_LOCAL uint64_t tl_tid = next_thread_id();
+ uint64_t thread_id() {
+-    static FISH_THREAD_LOCAL uint64_t tl_tid = next_thread_id();
+     return tl_tid;
  }
++#endif
  
  // Debounce implementation note: we would like to enqueue at most one request, except if a thread
+ // hangs (e.g. on fs access) then we do not want to block indefinitely; such threads are called
 diff --git i/src/output.cpp w/src/output.cpp
 index 10aab08..1f3289a 100644
 --- i/src/output.cpp
